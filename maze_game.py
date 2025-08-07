@@ -1,6 +1,10 @@
 import pygame
 import sys
+import json
+import os
 from player import Player
+
+SAVE_FILE = "save.json"
 
 class MazeGame:
     def __init__(self, image_path, start, goal, bad_points):
@@ -19,17 +23,48 @@ class MazeGame:
         self.clock = pygame.time.Clock()
         self.running = True
 
+        if self.has_save():
+            answer = input("Знайдено збереження. Бажаєте продовжити гру? (y/n): ")
+            if answer.lower() == "y":
+                self.load_progress()
+            else:
+                self.delete_save()
+
+    def has_save(self):
+        return os.path.exists(SAVE_FILE)
+
+    def save_progress(self):
+        data = {
+            "x": self.player.prev_pos[0],
+            "y": self.player.prev_pos[1]
+        }
+        with open(SAVE_FILE, "w") as file:
+            json.dump(data, file)
+        print("Прогрес збережено.")
+
+    def load_progress(self):
+        with open(SAVE_FILE, "r") as file:
+            data = json.load(file)
+        self.player.x = data["x"]
+        self.player.y = data["y"]
+        self.player.prev_pos = (data["x"], data["y"])
+        print("Прогрес завантажено.")
+
+    def delete_save(self):
+        if self.has_save():
+            os.remove(SAVE_FILE)
+            print("Старий прогрес видалено.")
+
     def is_touching_wall(self, x, y):
         for dx in range(-self.player.radius, self.player.radius + 1):
             for dy in range(-self.player.radius, self.player.radius + 1):
-                dist_sq = dx ** 2 + dy ** 2
-                if dist_sq <= self.player.radius ** 2:
+                if dx ** 2 + dy ** 2 <= self.player.radius ** 2:
                     try:
                         pixel = self.maze_image.get_at((x + dx, y + dy))[:3]
                         if pixel == (0, 0, 0):
                             return True
                     except IndexError:
-                        return True  # Вихід за межі
+                        return True
         return False
 
     def is_goal_reached(self):
@@ -41,35 +76,41 @@ class MazeGame:
                 return True
         return False
 
-    def is_back_move(self):
-        return self.player.prev_pos == (self.player.x, self.player.y)
-
     def handle_move(self, dx, dy):
         new_x = self.player.x + dx * self.player.step
         new_y = self.player.y + dy * self.player.step
 
         if self.is_touching_wall(new_x, new_y):
             print("Шарік вдарився об стіну, гра завершена.")
-            self.running = False
+            self.ask_save_and_exit()
             return
 
         if self.player.prev_pos == (new_x, new_y):
             print("Шарік злякався і втік, гра завершена.")
-            self.running = False
+            self.ask_save_and_exit()
             return
 
         if self.is_wrong_path(new_x, new_y):
             print("Шарік заблукав, гра завершена.")
-            self.running = False
+            self.ask_save_and_exit()
             return
 
         self.player.move(dx, dy)
 
         if self.is_goal_reached():
             print("Вітаємо! Шарік пройшов лабіринт.")
+            self.delete_save()
             self.running = False
         else:
             print("Шарік знайшов правильний шлях.")
+
+    def ask_save_and_exit(self):
+        answer = input("Бажаєте зберегти прогрес? (y/n): ")
+        if answer.lower() == "y":
+            self.save_progress()
+        else:
+            self.delete_save()
+        self.running = False
 
     def run(self):
         while self.running:
